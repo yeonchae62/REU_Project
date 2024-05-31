@@ -1,6 +1,8 @@
 import csv
 from datetime import datetime
+from eda_plot import eda_plot
 import matplotlib.pyplot as plt
+import neurokit2 as nk
 import os
 from pathlib import Path
 import pytz
@@ -141,7 +143,6 @@ def slope_flat_bounds(boundaries: list[tuple[tuple[str, str, str], datetime, dat
     }
 
 # Example usage with real data
-# NOTE: requires EDA and Data-Post-Processing directories to be present in the current working directory
 with open('./EDA/2023-09-22/eda.csv', 'r') as file:
     reader = csv.reader(file)
     data = list(reader)
@@ -174,4 +175,7 @@ with open('./EDA/2023-09-22/eda.csv', 'r') as file:
 
     # only extract the eda values, we know the sampling rate is 64 Hz
     eda_values = [float(row[1]) for row in data[1:]]
-    plot_eda('2023-09-22', [(eda_values, '#735a8f', 'EDA')], intervals)
+    # plot_eda('2023-09-22', [(eda_values, '#735a8f', 'EDA')], intervals)
+    signals, info = nk.eda_process(eda_values, sampling_rate=64/60)
+    eda_plot('Electrodermal Activity (EDA), 2023-09-22', first_datetime, signals, info, intervals)
+    plt.show()
