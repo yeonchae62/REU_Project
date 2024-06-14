@@ -1,6 +1,7 @@
 __pycache__/
-Data-Extracted/
-Data-Post-Processing/
+*/Data/
+*/Data-Extracted/
+*/Data-Post-Processing/
 EDA/
 node_modules/
 tags

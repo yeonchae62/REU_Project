@@ -1,86 +1,112 @@
 import csv
 from datetime import datetime
-from eda_plot import eda_plot
+from make_plot import eda_plot
 import matplotlib.pyplot as plt
 import neurokit2 as nk
 import os
 from pathlib import Path
 import pytz
 
-def plot_eda(date: str, data, labeled_regions=None):
-    plt.figure(figsize=(15, 3))
-    for d in data:
-        to_plot, color, label = d
-        plt.plot(to_plot, color=color, label=label, zorder=1)
-
-    plt.title(f'Electrodermal Activity (EDA), {date}', fontsize=14, fontweight='bold')
-    plt.xlabel('Time (seconds)', fontsize=12)
-    plt.ylabel('Signal strength', fontsize=12)
-    plt.legend()
-
-    if labeled_regions:
-        first = 0
-        for region in labeled_regions:
-            start, end, label = region
-            if start > first:
-                # draw ignored rectangle
-                plt.axvspan(first, start, color='black', alpha=0.65, zorder=2)
-                first = end
-
-            # draw labeled rectangle
-            plt.text((start + end) / 2, plt.ylim()[0], label, ha='center', va='bottom', color='black', fontsize=10, fontweight='bold', zorder=3)
-            plt.text(start, plt.ylim()[0], f'{start}', ha='center', va='top', color='black', fontsize=8, zorder=3)
-            plt.text(end, plt.ylim()[0], f'{end}', ha='center', va='top', color='black', fontsize=8, zorder=3)
-
-        # ignore the rest of the data
-        if first < len(data[0][0]):
-            plt.axvspan(first, len(data[0][0]), color='black', alpha=0.65, zorder=2)
-
-    plt.show()
-
-# # Example usage with arbitrary data
-# x = np.linspace(0, 100, 500)
-# raw_data_1 = 1 + 0.5 * np.sin(0.1 * x) + 0.2 * np.random.randn(500)
-# cleaned_data_1 = 1 + 0.5 * np.sin(0.1 * x)
-#
-# x = np.linspace(0, 120, 300)
-# raw_data_2 = 1 + 0.5 * np.sin(0.1 * x) + 0.2 * np.random.randn(300)
-# cleaned_data_2 = 1 + 0.5 * np.sin(0.1 * x)
-#
-# plot_eda([
-#     (raw_data_1, '#735a8f', 'Flat - raw'),
-#     (cleaned_data_1, '#7b00ff', 'Flat - cleaned'),
-#     (raw_data_2, '#877f56', 'Slope - raw'),
-#     (cleaned_data_2, '#e3bd00', 'Slope - cleaned')
-# ], [
-#     (20, 70, 'Flat'),
-#     (90, 110, 'Slope'),
-# ])
-
 TIMEZONE = pytz.timezone('America/Chicago')
+
+class Eda:
+    '''
+    A wrapper around a set of `eda.csv` files and the paths to those files, providing tools to search and segment all given data at once.
+    '''
+    def __init__(self, data_set: dict[tuple[str, str, str], list[tuple[float, float]]]):
+        self.data = data_set;
+
+    def chunk(self, group_pattern: tuple[str, str, str]) -> 'Eda':
+        '''
+        Returns a wrapper over a subset of this Eda instance's data. The subset will include all groups that match the provided group pattern.
+
+        A group pattern in this context is a tuple of strings used to verify the structure of a group. Each string within the pattern indicates what strings are valid in a potential group-to-be-matched. An example of a pattern is:
+
+        `('HMD', 'fdump', '*')`
+
+        This pattern will match any group whose first two components are 'HMD', and 'fdump'. The final component of the group can be anything, indicated by the wildcard '*'.
+        '''
+        def str_match(test: str, pattern: str) -> bool:
+            '''
+            Returns true if the given string matches the pattern.
+
+            The pattern can contain at most one wildcard '*', indicating zero or more characters at its location.
+            '''
+            wildcard_pos = pattern.find('*')
+
+            # if no wildcard, pattern must match string exactly
+            if wildcard_pos == -1:
+                return test == pattern
+
+            # match pattern
+            prefix = pattern[:wildcard_pos]
+            suffix = pattern[wildcard_pos + 1:]
+
+            if test.startswith(prefix) and test.endswith(suffix):
+                return len(test) >= len(prefix) + len(suffix)
+
+            return False
+
+        def pattern_match(group: tuple[str, str, str], pattern: tuple[str, str, str]):
+            '''
+            Returns true if the given group matches the pattern, as specified in the documentation for `chunk`.
+            '''
+            for test, pat in zip(group, pattern):
+                if not str_match(test, pat):
+                    return False
+            return True
+
+        result = {}
+
+        for group, data in self.data.items():
+            if pattern_match(group, group_pattern):
+                result[group] = data[:]
+
+        return Eda(result)
+
+    @staticmethod
+    def from_dir(start_dir: Path) -> 'Eda':
+        '''
+        Creates an Eda instance from `eda.csv` files found by walking the given starting directory.
+        '''
+        def process_one(eda_path: Path) -> tuple[tuple[str, str, str], list[tuple[float, float]]]:
+            '''
+            Determines the groups of this `eda.csv` file (e.g., HMD + fdump + trial 1) and the data contained inside it.
+            '''
+            parts = eda_path.parts
+            groups = parts[-4], parts[-3], parts[-2]
+
+            data = []
+
+            with open(eda_path, 'r') as file:
+                reader = csv.reader(file)
+
+                # skip header
+                next(reader)
+
+                for line in reader:
+                    data.append((
+                        float(line[0]), # timestamp
+                        float(line[1]), # eda
+                    ))
+
+            return (groups, data)
+
+        data = {}
+        for root, _, files in os.walk(start_dir):
+            for file in files:
+                if file == 'eda.csv':
+                    (groups, result) = process_one(Path(os.path.join(root, file)))
+                    data[groups] = result
+        return Eda(data)
+
+out = Eda.from_dir(Path('./split-eda/Data-Post-Processing/2023-09-22/Hao/'))
+exit()
 
 def get_boundaries(dir: Path):
     '''
     Find the start and end times of the experiments that occurred in the given date / directory.
     '''
-
-    def get_csvs(start_dir: Path) -> list[Path]:
-        '''
-        Find all eda.csv files in the given directories.
-        '''
-        csvs = []
-        for root, _, files in os.walk(start_dir):
-            for file in files:
-                if file == 'eda.csv':
-                    csvs.append(Path(os.path.join(root, file)))
-        return csvs
-
-    def process_path(path: Path) -> tuple[str, str, str]:
-        '''
-        Given a path in the form '??/Data-Post-Processing/2023-09-06/HMD/fdump/1/eda.csv', extract the test type, environment, and trial number into a tuple.
-        '''
-        parts = path.parts
-        return parts[-4], parts[-3], parts[-2]
 
     def get_timestamps(csvs: list[Path]) -> list[tuple[tuple[str, str, str], datetime, datetime]]:
         '''
