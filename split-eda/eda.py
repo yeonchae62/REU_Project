@@ -13,7 +13,8 @@ class Eda:
     '''
     A wrapper around a set of `eda.csv` files and the paths to those files, providing tools to search and segment all given data at once.
     '''
-    def __init__(self, data_set: dict[tuple[str, str, str], list[tuple[float, float]]]):
+    def __init__(self, raw: list[tuple[float, float]], data_set: dict[tuple[str, str, str], list[tuple[float, float]]]):
+        self.raw = raw
         self.data = data_set;
 
     def chunk(self, group_pattern: tuple[str, str, str]) -> 'Eda':
@@ -62,10 +63,47 @@ class Eda:
             if pattern_match(group, group_pattern):
                 result[group] = data[:]
 
-        return Eda(result)
+        return Eda(self.raw[:], result)
+
+    def get_raw_min_max_timestamps(self) -> tuple[datetime, datetime]:
+        '''
+        Returns the earliest and latest timestamps found in the raw data. This will not account for any data segmentation.
+
+        The return value will remain the same on all copies of this instance made by calling `chunk`.
+        '''
+        first_timestamp_micros = self.raw[0][0]
+        last_timestamp_micros = self.raw[-1][0]
+
+        return (
+            datetime.fromtimestamp(first_timestamp_micros / 1_000_000, TIMEZONE),
+            datetime.fromtimestamp(last_timestamp_micros / 1_000_000, TIMEZONE),
+        )
+
+    def get_min_max_timestamps(self) -> tuple[datetime, datetime]:
+        '''
+        Returns the earliest and latest timestamps found in the data.
+        '''
+        earliest_micros = None
+        latest_micros = None
+
+        for _, data in self.data.items():
+            first_timestamp_micros = data[0][0]
+            last_timestamp_micros = data[-1][0]
+
+            if earliest_micros is None or first_timestamp_micros < earliest_micros:
+                earliest_micros = first_timestamp_micros
+            if latest_micros is None or last_timestamp_micros > latest_micros:
+                latest_micros = last_timestamp_micros
+
+        assert earliest_micros is not None
+        assert latest_micros is not None
+        return (
+            datetime.fromtimestamp(earliest_micros / 1_000_000, TIMEZONE),
+            datetime.fromtimestamp(latest_micros / 1_000_000, TIMEZONE),
+        )
 
     @staticmethod
-    def from_dir(start_dir: Path) -> 'Eda':
+    def from_dir(raw_path: Path, start_dir: Path) -> 'Eda':
         '''
         Creates an Eda instance from `eda.csv` files found by walking the given starting directory.
         '''
@@ -98,110 +136,34 @@ class Eda:
                 if file == 'eda.csv':
                     (groups, result) = process_one(Path(os.path.join(root, file)))
                     data[groups] = result
-        return Eda(data)
+        return Eda(process_one(raw_path)[1], data)
 
-out = Eda.from_dir(Path('./split-eda/Data-Post-Processing/2023-09-22/Hao/'))
-exit()
+out = Eda.from_dir(
+    Path('./split-eda/Data/EDA/Experiment1/2023-09-22/eda.csv'),
+    Path('./split-eda/Data-Post-Processing/2023-09-22/Hao/'),
+)
 
-def get_boundaries(dir: Path):
-    '''
-    Find the start and end times of the experiments that occurred in the given date / directory.
-    '''
+bounds = out.get_raw_min_max_timestamps()
+print(bounds)
 
-    def get_timestamps(csvs: list[Path]) -> list[tuple[tuple[str, str, str], datetime, datetime]]:
-        '''
-        Extract the start and end times of the slope and flat experiments from the given csv files, by iterating over all csv files, extracting the first and last timestamps, and choosing the earliest and latest timestamps as the start and end times.
-        '''
-        out = []
-        for path in csvs:
-            first_timestamps = []
-            last_timestamps = []
+slope_chunk = out.chunk(('*', 's*', '*'))
+flat_chunk = out.chunk(('*', 'f*', '*'))
 
-            with open(path, 'r') as file:
-                reader = csv.reader(file)
-                data = list(reader)
+slope_bounds = slope_chunk.get_min_max_timestamps()
+flat_bounds = flat_chunk.get_min_max_timestamps()
+print(slope_bounds)
+print(flat_bounds)
 
-                first_timestamp_micros = float(data[1][0]) # skip the header row
-                last_timestamp_micros = float(data[-1][0])
+def get_secs(dt: datetime) -> float:
+    return (dt - bounds[0]).total_seconds()
 
-                first_timestamps.append(first_timestamp_micros)
-                last_timestamps.append(last_timestamp_micros)
+intervals = [
+    (get_secs(slope_bounds[0]), get_secs(slope_bounds[1]), 'Slope'),
+    (get_secs(flat_bounds[0]), get_secs(flat_bounds[1]), 'Flat'),
+]
 
-            first_timestamp = min(first_timestamps)
-            last_timestamp = max(last_timestamps)
-
-            first_datetime = datetime.fromtimestamp(first_timestamp / 1_000_000, TIMEZONE)
-            last_datetime = datetime.fromtimestamp(last_timestamp / 1_000_000, TIMEZONE)
-
-            out.append((process_path(path), first_datetime, last_datetime))
-
-        return out
-
-    return get_timestamps(get_csvs(dir))
-
-def slope_flat_bounds(boundaries: list[tuple[tuple[str, str, str], datetime, datetime]]) -> dict[str, tuple[datetime, datetime]]:
-    '''
-    Given a list of boundaries in the form [(('HMD', 'fdump', '1'), datetime, datetime), ...], return the earliest slope start time and the latest flat end time.
-    '''
-    slope_start = None
-    slope_end = None
-    flat_start = None
-    flat_end = None
-
-    for boundary in boundaries:
-        _, environment, _ = boundary[0]
-        start, end = boundary[1], boundary[2]
-
-        if environment.startswith('s'):
-            if slope_start is None or start < slope_start:
-                slope_start = start
-            if slope_end is None or end > slope_end:
-                slope_end = end
-        elif environment.startswith('f'):
-            if flat_start is None or start < flat_start:
-                flat_start = start
-            if flat_end is None or end > flat_end:
-                flat_end = end
-
-    return {
-        'slope': (slope_start, slope_end),
-        'flat': (flat_start, flat_end),
-    }
-
-# Example usage with real data
-with open('./EDA/2023-09-22/eda.csv', 'r') as file:
-    reader = csv.reader(file)
-    data = list(reader)
-
-    print(len(data))
-
-    first_timestamp_micros = int(data[1][0])
-    first_datetime = datetime.fromtimestamp(first_timestamp_micros / 1_000_000, TIMEZONE)
-    print(first_timestamp_micros)
-    print(first_datetime)
-
-    last_timestamp_micros = int(data[-1][0])
-    last_datetime = datetime.fromtimestamp(last_timestamp_micros / 1_000_000, TIMEZONE)
-    print(last_timestamp_micros)
-    print(last_datetime)
-
-    def get_secs(dt: datetime) -> float:
-        return (dt - first_datetime).total_seconds()
-
-    # this value must match len(data)
-    print(get_secs(last_datetime))
-
-    bounds = get_boundaries(Path('./Data-Post-Processing/2023-09-22/Hao/'))
-    slope_flat = slope_flat_bounds(bounds)
-    intervals = [
-        (get_secs(slope_flat['slope'][0]), get_secs(slope_flat['slope'][1]), 'Slope'),
-        (get_secs(slope_flat['flat'][0]), get_secs(slope_flat['flat'][1]), 'Flat'),
-    ]
-    print(intervals)
-
-    # only extract the eda values, we know the sampling rate is 64 Hz
-    eda_values = [float(row[1]) for row in data[1:]]
-    # plot_eda('2023-09-22', [(eda_values, '#735a8f', 'EDA')], intervals)
-    signals, info = nk.eda_process(eda_values, sampling_rate=64/60)
-    eda_plot('Electrodermal Activity (EDA), 2023-09-22', first_datetime, signals, info, intervals)
-    plt.show()
+# only extract the eda values, we know the sampling rate is 64 Hz
+eda_values = [float(row[1]) for row in out.raw]
+signals, info = nk.eda_process(eda_values, sampling_rate=64/60)
+eda_plot('Electrodermal Activity (EDA), 2023-09-22 Hao', bounds[0], signals, info, intervals)
+plt.show()
