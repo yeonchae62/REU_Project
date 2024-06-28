@@ -1,6 +1,7 @@
 import csv
 from datetime import datetime
 from make_plot import eda_plot
+import math
 import matplotlib.pyplot as plt
 import neurokit2 as nk
 import os
@@ -59,12 +60,47 @@ def get_min_max_timestamps_many(data: dict[tuple[str, str, str], list[tuple[floa
         datetime.fromtimestamp(latest_micros / 1_000_000, TIMEZONE),
     )
 
+def break_by_large_gap(raw: list[tuple[float, float]]) -> list[list[tuple[float, float]]]:
+    '''
+    Breaks the given raw data into chunks based on the presence of "large" gaps in the timestamps.
+
+    A gap between two data points is "large" if the time between them is greater than 3 standard deviations above the average time between data points.
+    '''
+    # compute the gap sizes for each data point
+    # gap_sizes[i] = raw[i + 1][0] - raw[i][0]
+    gap_sizes = []
+    for i in range(1, len(raw)):
+        diff = raw[i][0] - raw[i - 1][0]
+        gap_sizes.append(diff)
+
+    average_time_in_micros = sum(gap_sizes) / len(gap_sizes)
+    sum_of_squared_diffs = sum((x - average_time_in_micros) ** 2 for x in gap_sizes)
+    stddev = math.sqrt(sum_of_squared_diffs / len(gap_sizes))
+
+    def is_large_gap(diff: float) -> bool:
+        return diff > average_time_in_micros + 3 * stddev
+
+    # locate the indices of the large gaps
+    # note that found indices point at the data point that immediately precedes the large gap
+    large_gaps = [i for i, diff in enumerate(gap_sizes) if is_large_gap(diff)]
+
+    # break the data into chunks based on the large gaps
+    chunks = []
+    start = 0
+
+    for gap in large_gaps:
+        chunks.append(raw[start:gap + 1])
+        start = gap + 1
+
+    chunks.append(raw[start:])
+    return chunks
+
 class Eda:
     '''
     A wrapper around a set of `eda.csv` files and the paths to those files, providing tools to search and segment all given data at once.
     '''
     def __init__(self, raw: list[tuple[float, float]], data_set: dict[tuple[str, str, str], list[tuple[float, float]]]):
-        self.raw = raw
+        self.raw_chunks = break_by_large_gap(raw)
         self.data = data_set;
 
     def chunk(self, group_pattern: tuple[str, str, str]) -> 'Eda':
