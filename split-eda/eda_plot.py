@@ -36,6 +36,11 @@ def eda_plot(
         '''
         Mark the labeled regions with dark rectangles, indicating that they should be ignored.
         '''
+        # sort the labeled regions by start time
+        # if they aren't sorted, the rectangles will get drawn in a weird order
+        labeled_regions = labeled_regions[:]
+        labeled_regions.sort(key=lambda region: region[0])
+
         first = bounds[0]
         for region in labeled_regions:
             start, end, label = region
