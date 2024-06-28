@@ -3,6 +3,7 @@ from datetime import datetime
 from make_plot import eda_plot
 import math
 import matplotlib.pyplot as plt
+from eda_pre_process import pre_process_raw_eda
 import neurokit2 as nk
 import os
 from pathlib import Path
@@ -60,47 +61,14 @@ def get_min_max_timestamps_many(data: dict[tuple[str, str, str], list[tuple[floa
         datetime.fromtimestamp(latest_micros / 1_000_000, TIMEZONE),
     )
 
-def break_by_large_gap(raw: list[tuple[float, float]]) -> list[list[tuple[float, float]]]:
-    '''
-    Breaks the given raw data into chunks based on the presence of "large" gaps in the timestamps.
-
-    A gap between two data points is "large" if the time between them is greater than 3 standard deviations above the average time between data points.
-    '''
-    # compute the gap sizes for each data point
-    # gap_sizes[i] = raw[i + 1][0] - raw[i][0]
-    gap_sizes = []
-    for i in range(1, len(raw)):
-        diff = raw[i][0] - raw[i - 1][0]
-        gap_sizes.append(diff)
-
-    average_time_in_micros = sum(gap_sizes) / len(gap_sizes)
-    sum_of_squared_diffs = sum((x - average_time_in_micros) ** 2 for x in gap_sizes)
-    stddev = math.sqrt(sum_of_squared_diffs / len(gap_sizes))
-
-    def is_large_gap(diff: float) -> bool:
-        return diff > average_time_in_micros + 3 * stddev
-
-    # locate the indices of the large gaps
-    # note that found indices point at the data point that immediately precedes the large gap
-    large_gaps = [i for i, diff in enumerate(gap_sizes) if is_large_gap(diff)]
-
-    # break the data into chunks based on the large gaps
-    chunks = []
-    start = 0
-
-    for gap in large_gaps:
-        chunks.append(raw[start:gap + 1])
-        start = gap + 1
-
-    chunks.append(raw[start:])
-    return chunks
-
 class Eda:
     '''
     A wrapper around a set of `eda.csv` files and the paths to those files, providing tools to search and segment all given data at once.
     '''
     def __init__(self, raw: list[tuple[float, float]], data_set: dict[tuple[str, str, str], list[tuple[float, float]]]):
-        self.raw_chunks = break_by_large_gap(raw)
+        self.raw_chunks = pre_process_raw_eda(raw)
+        self.analyzed_data = [(nk.eda_process([eda_value for _, eda_value in chunk.data], sampling_rate=chunk.sampling_rate)) for chunk in self.raw_chunks]
+
         self.data = data_set;
 
     def chunk(self, group_pattern: tuple[str, str, str]) -> 'Eda':
@@ -199,94 +167,3 @@ class Eda:
                     (groups, result) = process_one(Path(os.path.join(root, file)))
                     data[groups] = result
         return Eda(process_one(raw_path)[1], data)
-
-out = Eda.from_dir(
-    Path('./split-eda/Data/EDA/Experiment1/2023-09-22/eda.csv'),
-    Path('./split-eda/Data-Post-Processing/2023-09-22/Hao/'),
-)
-
-def get_secs(dt: datetime) -> float:
-    return (dt - bounds[0]).total_seconds()
-
-bounds = out.get_raw_min_max_timestamps()
-print(bounds)
-
-# draw visualization type 1
-
-slope_chunk = out.chunk(('*', 's*', '*'))
-flat_chunk = out.chunk(('*', 'f*', '*'))
-
-slope_bounds = slope_chunk.get_min_max_timestamps()
-flat_bounds = flat_chunk.get_min_max_timestamps()
-
-intervals = [
-    (get_secs(slope_bounds[0]), get_secs(slope_bounds[1]), 'Slope'),
-    (get_secs(flat_bounds[0]), get_secs(flat_bounds[1]), 'Flat'),
-]
-
-# compute average time between each data point
-total_time = bounds[1] - bounds[0]
-total_secs = total_time.total_seconds()
-print(total_time, total_secs)
-expected_time_per_point = total_secs / len(out.raw)
-print(f'Expected time per point: {expected_time_per_point} seconds')
-
-# compute the actual time between each data point
-actual_times = []
-min_diff = None
-max_diff = None
-for i in range(1, len(out.raw)):
-    diff = out.raw[i][0] - out.raw[i - 1][0]
-    if diff > 500_000:
-        print(f'Large gap detected: {diff / 1_000_000} seconds')
-        print(f'Index: {i}')
-        print(f'surrounding times:')
-        for j in range(max(0, i - 3), min(len(out.raw), i + 3)):
-            print(f'   {j}: {out.raw[j][0]}')
-    actual_times.append(diff)
-
-    if min_diff is None or diff < min_diff:
-        min_diff = diff
-    if max_diff is None or diff > max_diff:
-        max_diff = diff
-
-average_time_in_micros = sum(actual_times) / len(actual_times)
-print(f'Average time between points: {average_time_in_micros / 1_000_000} seconds')
-print(f'Minimum time between points: {min_diff / 1_000_000} seconds')
-print(f'Maximum time between points: {max_diff / 1_000_000} seconds')
-import math
-stddev = math.sqrt(sum((x - average_time_in_micros) ** 2 for x in actual_times) / len(actual_times))
-print(f'Standard deviation of time between points: {stddev / 1_000_000} seconds')
-
-# only extract the eda values, we know the sampling rate is 64 Hz
-eda_values = [float(row[1]) for row in out.raw]
-# signals, info = nk.eda_process(eda_values, sampling_rate=64/60)
-signals, info = nk.eda_process(eda_values, sampling_rate=1/0.250026)
-eda_plot('Electrodermal Activity (EDA), 2023-09-22 Hao, Type 1', bounds[0], signals, info, intervals)
-plt.show()
-exit()
-# draw visualization type 2
-
-# TODO: do for flat and slope
-slope_bounds = slope_chunk.get_raw_min_max_timestamps()
-print(slope_bounds)
-print(len(slope_chunk.raw))
-
-single_chunk = slope_chunk.chunk(('single-view', '*', '*'))
-multi_chunk = slope_chunk.chunk(('multiple-view', '*', '*'))
-hmd_chunk = slope_chunk.chunk(('HMD', '*', '*'))
-
-single_bounds = single_chunk.get_min_max_timestamps()
-multi_bounds = multi_chunk.get_min_max_timestamps()
-hmd_bounds = hmd_chunk.get_min_max_timestamps()
-
-intervals = [
-    (get_secs(single_bounds[0]), get_secs(single_bounds[1]), 'Single View'),
-    (get_secs(multi_bounds[0]), get_secs(multi_bounds[1]), 'Multi View'),
-    (get_secs(hmd_bounds[0]), get_secs(hmd_bounds[1]), 'HMD'),
-]
-
-eda_values = [float(row[0]) for row in slope_chunk.raw]
-signals, info = nk.eda_process(eda_values, sampling_rate=4)
-eda_plot('Electrodermal Activity (EDA), 2023-09-22 Hao, Type 2', slope_bounds[0], signals, info, intervals)
-plt.show()
