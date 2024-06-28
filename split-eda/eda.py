@@ -91,7 +91,7 @@ class Eda:
 
     def chunk(self, group_pattern: tuple[str, str, str]) -> 'Eda':
         '''
-        Returns a wrapper over a subset of this Eda instance's data. The subset will include all groups that match the provided group pattern.
+        Returns a copy of this Eda instance's data, but with only thr groups that match the provided group pattern.
 
         A group pattern in this context is a tuple of strings used to verify the structure of a group. Each string within the pattern indicates what strings are valid in a potential group-to-be-matched. An example of a pattern is:
 
@@ -136,8 +136,6 @@ class Eda:
                 result[group] = bounds
 
         return Eda(self.raw_chunks[:], self.analyzed_data[:], result)
-        # new_data_bounds = get_min_max_timestamps(result)
-        # return Eda(filter_by_timestamp_bounds(self.raw, new_data_bounds), result)
 
     def get_raw_min_max_timestamps(self) -> tuple[datetime, datetime]:
         '''
