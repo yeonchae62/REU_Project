@@ -17,6 +17,9 @@ class PreProcessedEda:
         average_time_in_micros = sum(gap_sizes) / len(gap_sizes)
         return PreProcessedEda(raw, 1_000_000 / average_time_in_micros)
 
+    def __copy__(self) -> 'PreProcessedEda':
+        return PreProcessedEda(self.data[:], self.sampling_rate)
+
     def __repr__(self) -> str:
         return f'PreProcessedEda(data={self.data}, sampling_rate={self.sampling_rate})'
 

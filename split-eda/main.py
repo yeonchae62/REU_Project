@@ -9,15 +9,6 @@ out = Eda.from_dir(
     Path('./split-eda/Data-Post-Processing/2023-09-22/Hao/'),
 )
 
-for i, (signals, info) in enumerate(out.analyzed_data):
-    temp_date = datetime.fromtimestamp(out.raw_chunks[i].data[0][0] / 1_000_000, TIMEZONE)
-    eda_plot('Electrodermal Activity (EDA), 2023-09-22 Hao, Type 1', temp_date, signals, info, [])
-    plt.show()
-exit()
-
-def get_secs(dt: datetime) -> float:
-    return (dt - bounds[0]).total_seconds()
-
 bounds = out.get_raw_min_max_timestamps()
 print(bounds)
 
@@ -29,20 +20,15 @@ flat_chunk = out.chunk(('*', 'f*', '*'))
 slope_bounds = slope_chunk.get_min_max_timestamps()
 flat_bounds = flat_chunk.get_min_max_timestamps()
 
+# convert datetime.timestamp() to microseconds
 intervals = [
-    (get_secs(slope_bounds[0]), get_secs(slope_bounds[1]), 'Slope'),
-    (get_secs(flat_bounds[0]), get_secs(flat_bounds[1]), 'Flat'),
+    (slope_bounds[0].timestamp() * 1_000_000, slope_bounds[1].timestamp() * 1_000_000, 'Slope'),
+    (flat_bounds[0].timestamp() * 1_000_000, flat_bounds[1].timestamp() * 1_000_000, 'Flat'),
 ]
 
-# only extract the eda values, we know the sampling rate is 64 Hz
-eda_values = [float(row[1]) for row in out.raw]
-# signals, info = nk.eda_process(eda_values, sampling_rate=64/60)
-signals, info = nk.eda_process(eda_values, sampling_rate=1/0.250026)
-print(info.keys())
+out.plot('Electrodermal Activity (EDA), 2023-09-22 Hao, Type 1', intervals)
 exit()
-eda_plot('Electrodermal Activity (EDA), 2023-09-22 Hao, Type 1', bounds[0], signals, info, intervals)
-plt.show()
-exit()
+
 # draw visualization type 2
 
 # TODO: do for flat and slope

@@ -1,9 +1,8 @@
 import csv
 from datetime import datetime
-from make_plot import eda_plot
-import math
+from eda_plot import eda_plot
 import matplotlib.pyplot as plt
-from eda_pre_process import pre_process_raw_eda
+from eda_pre_process import PreProcessedEda, pre_process_raw_eda
 import neurokit2 as nk
 import os
 from pathlib import Path
@@ -11,12 +10,12 @@ import pytz
 
 TIMEZONE = pytz.timezone('America/Chicago')
 
-def get_min_max_timestamps(data: list[tuple[float, float]]) -> tuple[datetime, datetime]:
+def get_raw_min_max_timestamps(raw_chunks: list[PreProcessedEda]) -> tuple[datetime, datetime]:
     '''
-    Returns the earliest and latest timestamps found in one list of data, where each data point consists of a tuple containing the timestamp and the EDA value at that time.
+    Returns the earliest and latest timestamps found in raw chunks of data, where each data point consists of a tuple containing the timestamp and the EDA value at that time.
     '''
-    first_timestamp_micros = data[0][0]
-    last_timestamp_micros = data[-1][0]
+    first_timestamp_micros = raw_chunks[0].data[0][0]
+    last_timestamp_micros = raw_chunks[-1].data[-1][0]
 
     return (
         datetime.fromtimestamp(first_timestamp_micros / 1_000_000, TIMEZONE),
@@ -38,7 +37,7 @@ def filter_by_timestamp_bounds(data: list[tuple[float, float]], bounds: tuple[da
 
     return new_data
 
-def get_min_max_timestamps_many(data: dict[tuple[str, str, str], list[tuple[float, float]]]) -> tuple[datetime, datetime]:
+def get_min_max_timestamps(data: dict[tuple[str, str, str], tuple[float, float]]) -> tuple[datetime, datetime]:
     '''
     Returns the earliest and latest timestamps found in a set containing multiple lists of data.
     '''
@@ -46,8 +45,8 @@ def get_min_max_timestamps_many(data: dict[tuple[str, str, str], list[tuple[floa
     latest_micros = None
 
     for data in data.values():
-        first_timestamp_micros = data[0][0]
-        last_timestamp_micros = data[-1][0]
+        first_timestamp_micros = data[0]
+        last_timestamp_micros = data[-1]
 
         if earliest_micros is None or first_timestamp_micros < earliest_micros:
             earliest_micros = first_timestamp_micros
@@ -65,11 +64,30 @@ class Eda:
     '''
     A wrapper around a set of `eda.csv` files and the paths to those files, providing tools to search and segment all given data at once.
     '''
-    def __init__(self, raw: list[tuple[float, float]], data_set: dict[tuple[str, str, str], list[tuple[float, float]]]):
-        self.raw_chunks = pre_process_raw_eda(raw)
-        self.analyzed_data = [(nk.eda_process([eda_value for _, eda_value in chunk.data], sampling_rate=chunk.sampling_rate)) for chunk in self.raw_chunks]
+    def __init__(
+        self,
+        raw_chunks: list[PreProcessedEda],
+        analyzed_data: list[dict],
+        group_times: dict[tuple[str, str, str], tuple[float, float]],
+    ):
+        self.raw_chunks = raw_chunks
+        self.analyzed_data = analyzed_data
+        self.group_times = group_times
 
-        self.data = data_set;
+    @staticmethod
+    def process(
+        raw: list[tuple[float, float]],
+        group_times: dict[tuple[str, str, str], tuple[float, float]],
+    ) -> 'Eda':
+        '''
+        Creates an Eda instance by processing the given raw data.
+        '''
+        raw_chunks = pre_process_raw_eda(raw)
+        return Eda(
+            raw_chunks,
+            [(nk.eda_process([eda_value for _, eda_value in chunk.data], sampling_rate=chunk.sampling_rate)) for chunk in raw_chunks],
+            group_times,
+        )
 
     def chunk(self, group_pattern: tuple[str, str, str]) -> 'Eda':
         '''
@@ -113,38 +131,59 @@ class Eda:
 
         result = {}
 
-        for group, data in self.data.items():
+        for group, bounds in self.group_times.items():
             if pattern_match(group, group_pattern):
-                result[group] = data[:]
+                result[group] = bounds
 
-        new_data_bounds = get_min_max_timestamps_many(result)
-        return Eda(filter_by_timestamp_bounds(self.raw, new_data_bounds), result)
+        return Eda(self.raw_chunks[:], self.analyzed_data[:], result)
+        # new_data_bounds = get_min_max_timestamps(result)
+        # return Eda(filter_by_timestamp_bounds(self.raw, new_data_bounds), result)
 
     def get_raw_min_max_timestamps(self) -> tuple[datetime, datetime]:
         '''
         Returns the earliest and latest timestamps found in the raw data. This will not account for any data segmentation.
         '''
-        return get_min_max_timestamps(self.raw)
+        return get_raw_min_max_timestamps(self.raw_chunks)
 
     def get_min_max_timestamps(self) -> tuple[datetime, datetime]:
         '''
-        Returns the earliest and latest timestamps found in the data.
+        Returns the earliest and latest timestamps found in all groups of data.
         '''
-        return get_min_max_timestamps_many(self.data)
+        return get_min_max_timestamps(self.group_times)
+
+    def plot(self, title: str, labeled_regions: list[tuple[float, float, str]] = []):
+        '''
+        Plots the chunks of analyzed data on one graph.
+        '''
+        eda_plot(title, self.raw_chunks, self.analyzed_data, labeled_regions)
+        plt.show()
 
     @staticmethod
     def from_dir(raw_path: Path, start_dir: Path) -> 'Eda':
         '''
         Creates an Eda instance from `eda.csv` files found by walking the given starting directory.
         '''
-        def process_one(eda_path: Path) -> tuple[tuple[str, str, str], list[tuple[float, float]]]:
+        def process_raw(raw_path: Path) -> list[tuple[float, float]]:
             '''
-            Determines the groups of this `eda.csv` file (e.g., HMD + fdump + trial 1) and the data contained inside it.
+            Returns a list contaning the data found in the given `eda.csv` file.
+            '''
+            with open(raw_path, 'r') as file:
+                reader = csv.reader(file)
+
+                # skip header
+                next(reader)
+
+                return [(
+                    float(line[0]), # timestamp
+                    float(line[1]), # eda
+                ) for line in reader]
+
+        def process_group_file(eda_path: Path) -> tuple[tuple[str, str, str], tuple[float, float]]:
+            '''
+            Determines the groups of this `eda.csv` file (e.g., HMD + fdump + trial 1) and the start and end time this group was recorded.
             '''
             parts = eda_path.parts
             groups = parts[-4], parts[-3], parts[-2]
-
-            data = []
 
             with open(eda_path, 'r') as file:
                 reader = csv.reader(file)
@@ -152,18 +191,13 @@ class Eda:
                 # skip header
                 next(reader)
 
-                for line in reader:
-                    data.append((
-                        float(line[0]), # timestamp
-                        float(line[1]), # eda
-                    ))
+                data = list(reader)
+                return (groups, (float(data[0][0]), float(data[-1][0])))
 
-            return (groups, data)
-
-        data = {}
+        group_times = {}
         for root, _, files in os.walk(start_dir):
             for file in files:
                 if file == 'eda.csv':
-                    (groups, result) = process_one(Path(os.path.join(root, file)))
-                    data[groups] = result
-        return Eda(process_one(raw_path)[1], data)
+                    (groups, result) = process_group_file(Path(os.path.join(root, file)))
+                    group_times[groups] = result
+        return Eda.process(process_raw(raw_path), group_times)
