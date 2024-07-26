@@ -103,7 +103,10 @@ def format_1(data: str) -> list[dict]:
             'dump': dump
         })
 
-    return out
+    return {
+        'format': 1,
+        'data': out,
+    }
 
 def format_2(data: str) -> list[dict]:
     # order of data:
@@ -219,7 +222,10 @@ def format_2(data: str) -> list[dict]:
             'trials': trials,
         })
 
-    return out
+    return {
+        'format': 2,
+        'data': out,
+    }
 
 def main():
     parser = argparse.ArgumentParser(description=description, formatter_class=argparse.RawDescriptionHelpFormatter)
