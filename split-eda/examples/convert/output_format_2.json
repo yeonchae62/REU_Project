@@ -215,7 +215,7 @@
             "meta": {
                 "path": {
                     "visual_guide": "none",
-                    "environment": "demolition",
+                    "environment": "baseline",
                     "trial": 1
                 }
             },
@@ -250,7 +250,7 @@
             "meta": {
                 "path": {
                     "visual_guide": "mv1",
-                    "environment": "demolition",
+                    "environment": "baseline",
                     "trial": 1
                 }
             },
@@ -285,7 +285,7 @@
             "meta": {
                 "path": {
                     "visual_guide": "mv2",
-                    "environment": "demolition",
+                    "environment": "baseline",
                     "trial": 1
                 }
             },
@@ -320,7 +320,7 @@
             "meta": {
                 "path": {
                     "visual_guide": "discrete",
-                    "environment": "demolition",
+                    "environment": "baseline",
                     "trial": 1
                 }
             },
@@ -355,7 +355,7 @@
             "meta": {
                 "path": {
                     "visual_guide": "continuous",
-                    "environment": "demolition",
+                    "environment": "baseline",
                     "trial": 1
                 }
             },

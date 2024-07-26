@@ -198,7 +198,7 @@ def format_2(data: str) -> list[dict]:
     # 5 (groups) * 7 (lines per group, including bottom blank line)
     group_2_lines = 5 * 7
     for i in range(group_1_lines, group_1_lines + group_2_lines, 7):
-        path = order[(i - group_1_lines) // 7]
+        path = order[(i - group_1_lines) // 7 + 10]
         group = list(map(lambda s: fill(split_row(s), 2), lines[i:i + 7]))
 
         # get the start and end times for each trial
