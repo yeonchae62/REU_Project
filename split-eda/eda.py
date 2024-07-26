@@ -91,7 +91,7 @@ class Eda:
 
     def chunk(self, group_pattern: tuple[str, str, str]) -> 'Eda':
         '''
-        Returns a copy of this Eda instance's data, but with only thr groups that match the provided group pattern.
+        Returns a copy of this Eda instance's data, but with only the groups that match the provided group pattern.
 
         A group pattern in this context is a tuple of strings used to verify the structure of a group. Each string within the pattern indicates what strings are valid in a potential group-to-be-matched. An example of a pattern is:
 
@@ -120,7 +120,7 @@ class Eda:
 
             return False
 
-        def pattern_match(group: tuple[str, str, str], pattern: tuple[str, str, str]):
+        def pattern_match(group: tuple[str, str, str], pattern: tuple[str, str, str]) -> bool:
             '''
             Returns true if the given group matches the pattern, as specified in the documentation for `chunk`.
             '''
