@@ -32,12 +32,6 @@ def split_row(s: str) -> list[str]:
     '''
     return re.split(',|\t', s)
 
-def split_groups(data: str) -> list[str]:
-    '''
-    Splits data into groups of data, where each group is separated by a comma or tab.
-    '''
-    return list(map(lambda data: data.strip(), re.split('^,|\t$', data, flags=re.MULTILINE)))
-
 def fill(data: list[str], target_len: int) -> list[str]:
     '''
     Fills a list with empty strings until it reaches the target length.
@@ -68,9 +62,6 @@ def format_1(data: str) -> list[dict]:
     # go through each data and extract the start and end times, categorize by the above order
     out = []
 
-    # split the timing splits into individual lines
-    split = split_groups(data)
-
     order = [
         ('single-view', 'slope', 1),
         ('multiple-view', 'slope', 1),
@@ -86,16 +77,19 @@ def format_1(data: str) -> list[dict]:
         ('HMD', 'flat', 2),
     ]
 
-    # go through each group of data
-    for i, group in enumerate(split):
-        group = list(map(lambda s: fill(split_row(s), 2), group.split('\n')))
+    lines = data.split('\n')
+
+    # 12 (groups) * 5 (lines per group, including bottom blank line)
+    group_lines = 12 * 5
+    for i in range(0, group_lines, 5):
+        path = order[i // 5]
+        group = list(map(lambda s: fill(split_row(s), 2), lines[i:i + 5]))
 
         # get the start and end times
         pickup = (unwrap_or_none(group[1][0]), unwrap_or_none(group[1][1]))
         obstacle = (unwrap_or_none(group[2][0]), unwrap_or_none(group[2][1]))
         dump = (unwrap_or_none(group[3][0]), unwrap_or_none(group[3][1]))
 
-        path = order[i]
         out.append({
             'meta': {
                 'path': {
@@ -175,8 +169,7 @@ def format_2(data: str) -> list[dict]:
     # process data group 1-10
     # 10 (groups) * 4 (lines per group, including bottom blank line)
     group_1_lines = 10 * 4
-    i = 0
-    while i < group_1_lines:
+    for i in range(0, group_1_lines, 4):
         path = order[i // 4]
         group = list(map(lambda s: fill(split_row(s), 2), lines[i:i + 4]))
 
@@ -198,12 +191,10 @@ def format_2(data: str) -> list[dict]:
             'dump': dump
         })
 
-        i += 4
-
     # process data group 11-20
     # 5 (groups) * 7 (lines per group, including bottom blank line)
     group_2_lines = 5 * 7
-    while i < group_1_lines + group_2_lines:
+    for i in range(group_1_lines, group_1_lines + group_2_lines, 7):
         path = order[(i - group_1_lines) // 7]
         group = list(map(lambda s: fill(split_row(s), 2), lines[i:i + 7]))
 
@@ -228,8 +219,6 @@ def format_2(data: str) -> list[dict]:
             'trials': trials,
         })
 
-        i += 7
-
     return out
 
 def main():
@@ -252,7 +241,6 @@ def main():
         if args.format == 1:
             out = format_1(data)
         elif args.format == 2:
-            # TODO
             out = format_2(data)
 
         json.dump(out, outfile, indent=4)
