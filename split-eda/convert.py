@@ -110,33 +110,28 @@ def format_1(data: str) -> list[dict]:
 
 def format_2(data: str) -> list[dict]:
     # order of data:
-    # 1. none, demolition, trial 1
-    # 2. mv1 (side view), demolition, trial 1
-    # 3. mv2 (top view), demolition, trial 1
-    # 4. discrete, demolition, trial 1
-    # 5. continuous, demolition, trial 1
-    # 6. none, demolition, trial 2
-    # 7. mv1 (side view), demolition, trial 2
-    # 8. mv2 (top view), demolition, trial 2
-    # 9. discrete, demolition, trial 2
-    # 10. continuous, demolition, trial 2
-    # 11. none, baseline, trial 1
-    # 12. mv1 (side view), baseline, trial 1
-    # 13. mv2 (top view), baseline, trial 1
-    # 14. discrete, baseline, trial 1
-    # 15. continuous, baseline, trial 1
-    # 16. none, baseline, trial 2
-    # 17. mv1 (side view), baseline, trial 2
-    # 18. mv2 (top view), baseline, trial 2
-    # 19. discrete, baseline, trial 2
-    # 20. continuous, baseline, trial 2
+    # 1. demolition, none, trial 1
+    # 2. demolition, none, trial 2
+    # 3. demolition, mv1 (side view), trial 1
+    # 4. demolition, mv1 (side view), trial 2
+    # 5. demolition, mv2 (top view), trial 1
+    # 6. demolition, mv2 (top view), trial 2
+    # 7. demolition, discrete, trial 1
+    # 8. demolition, discrete, trial 2
+    # 9. demolition, continuous, trial 1
+    # 10. demolition, continuous, trial 2
+    # 11. baseline, none
+    # 12. baseline, mv1 (side view)
+    # 13. baseline, mv2 (top view)
+    # 14. baseline, discrete
+    # 15. baseline, continuous
 
     # data groups 1-10 contain 3 lines, each line is a start and end time
     # line 1: pickup start, pickup end
     # line 2: obstacle start, obstacle end
     # line 3: dump start, dump end
 
-    # data groups 11-20 contain 6 lines, each line is also a start and end time
+    # data groups 11-15 contain 6 lines, each line is also a start and end time
     # line 1: 1st trial start, 1st trial end
     # line 2: 2nd trial start, 2nd trial end
     # ...
@@ -145,26 +140,21 @@ def format_2(data: str) -> list[dict]:
     out = []
 
     order = [
-        ('none', 'demolition', 1),
-        ('mv1', 'demolition', 1),
-        ('mv2', 'demolition', 1),
-        ('discrete', 'demolition', 1),
-        ('continuous', 'demolition', 1),
-        ('none', 'demolition', 2),
-        ('mv1', 'demolition', 2),
-        ('mv2', 'demolition', 2),
-        ('discrete', 'demolition', 2),
-        ('continuous', 'demolition', 2),
-        ('none', 'baseline', 1),
-        ('mv1', 'baseline', 1),
-        ('mv2', 'baseline', 1),
-        ('discrete', 'baseline', 1),
-        ('continuous', 'baseline', 1),
-        ('none', 'baseline', 2),
-        ('mv1', 'baseline', 2),
-        ('mv2', 'baseline', 2),
-        ('discrete', 'baseline', 2),
-        ('continuous', 'baseline', 2),
+        ('demolition', 'none', 1),
+        ('demolition', 'none', 2),
+        ('demolition', 'mv1', 1),
+        ('demolition', 'mv1', 2),
+        ('demolition', 'mv2', 1),
+        ('demolition', 'mv2', 2),
+        ('demolition', 'discrete', 1),
+        ('demolition', 'discrete', 2),
+        ('demolition', 'continuous', 1),
+        ('demolition', 'continuous', 2),
+        ('baseline', 'none', 1),
+        ('baseline', 'mv1', 1),
+        ('baseline', 'mv2', 1),
+        ('baseline', 'discrete', 1),
+        ('baseline', 'continuous', 1),
     ]
 
     lines = data.split('\n')
@@ -184,8 +174,8 @@ def format_2(data: str) -> list[dict]:
         out.append({
             'meta': {
                 'path': {
-                    'visual_guide': path[0],
-                    'environment': path[1],
+                    'environment': path[0],
+                    'visual_guide': path[1],
                     'trial': path[2],
                 },
             },
@@ -194,7 +184,7 @@ def format_2(data: str) -> list[dict]:
             'dump': dump
         })
 
-    # process data group 11-20
+    # process data group 11-15
     # 5 (groups) * 7 (lines per group, including bottom blank line)
     group_2_lines = 5 * 7
     for i in range(group_1_lines, group_1_lines + group_2_lines, 7):
@@ -214,8 +204,8 @@ def format_2(data: str) -> list[dict]:
         out.append({
             'meta': {
                 'path': {
-                    'visual_guide': path[0],
-                    'environment': path[1],
+                    'environment': path[0],
+                    'visual_guide': path[1],
                     'trial': path[2],
                 },
             },
