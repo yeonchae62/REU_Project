@@ -7,6 +7,7 @@ import neurokit2 as nk
 import os
 from pathlib import Path
 import pytz
+import sys
 
 TIMEZONE = pytz.timezone('America/Chicago')
 
@@ -37,7 +38,7 @@ def filter_by_timestamp_bounds(data: list[tuple[float, float]], bounds: tuple[da
 
     return new_data
 
-def get_min_max_timestamps(data: dict[tuple[str, str, str], tuple[float, float]]) -> tuple[datetime, datetime]:
+def get_min_max_timestamps(data: dict[tuple[str, ...], tuple[float, float]]) -> tuple[datetime, datetime]:
     '''
     Returns the earliest and latest timestamps found in a set containing multiple lists of data.
     '''
@@ -68,7 +69,7 @@ class Eda:
         self,
         raw_chunks: list[PreProcessedEda],
         analyzed_data: list[dict],
-        group_times: dict[tuple[str, str, str], tuple[float, float]],
+        group_times: dict[tuple[str, ...], tuple[float, float]],
     ):
         self.raw_chunks = raw_chunks
         self.analyzed_data = analyzed_data
@@ -77,7 +78,7 @@ class Eda:
     @staticmethod
     def process(
         raw: list[tuple[float, float]],
-        group_times: dict[tuple[str, str, str], tuple[float, float]],
+        group_times: dict[tuple[str, ...], tuple[float, float]],
     ) -> 'Eda':
         '''
         Creates an Eda instance by processing the given raw data.
@@ -89,7 +90,7 @@ class Eda:
             group_times,
         )
 
-    def chunk(self, group_pattern: tuple[str, str, str]) -> 'Eda':
+    def chunk(self, group_pattern: tuple[str, ...]) -> 'Eda':
         '''
         Returns a copy of this Eda instance's data, but with only the groups that match the provided group pattern.
 
@@ -120,10 +121,13 @@ class Eda:
 
             return False
 
-        def pattern_match(group: tuple[str, str, str], pattern: tuple[str, str, str]) -> bool:
+        def pattern_match(group: tuple[str, ...], pattern: tuple[str, ...]) -> bool:
             '''
             Returns true if the given group matches the pattern, as specified in the documentation for `chunk`.
             '''
+            if len(group) != len(pattern):
+                print(f'pattern_match() warning: group ({group}) length != pattern ({pattern}) length', file=sys.stderr)
+                return False
             for test, pat in zip(group, pattern):
                 if not str_match(test, pat):
                     return False
@@ -157,7 +161,7 @@ class Eda:
         plt.show()
 
     @staticmethod
-    def from_dir(raw_path: Path, start_dir: Path) -> 'Eda':
+    def from_dir(raw_path: Path, start_dir: Path, pattern_len: int) -> 'Eda':
         '''
         Creates an Eda instance from `eda.csv` files found by walking the given starting directory.
         '''
@@ -176,12 +180,12 @@ class Eda:
                     float(line[1]), # eda
                 ) for line in reader]
 
-        def process_group_file(eda_path: Path) -> tuple[tuple[str, str, str], tuple[float, float]]:
+        def process_group_file(eda_path: Path, pattern_len: int) -> tuple[tuple[str, ...], tuple[float, float]]:
             '''
             Determines the groups of this `eda.csv` file (e.g., HMD + fdump + trial 1) and the start and end time this group was recorded.
             '''
             parts = eda_path.parts
-            groups = parts[-4], parts[-3], parts[-2]
+            groups = tuple(parts[-pattern_len-1:-1]) # :-1 to skip the filename
 
             with open(eda_path, 'r') as file:
                 reader = csv.reader(file)
@@ -196,6 +200,6 @@ class Eda:
         for root, _, files in os.walk(start_dir):
             for file in files:
                 if file == 'eda.csv':
-                    (groups, result) = process_group_file(Path(os.path.join(root, file)))
+                    (groups, result) = process_group_file(Path(os.path.join(root, file)), pattern_len)
                     group_times[groups] = result
         return Eda.process(process_raw(raw_path), group_times)
