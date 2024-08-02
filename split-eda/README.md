@@ -16,7 +16,7 @@ cd REU_Project
 pip install -r ./requirements.txt
 ```
 
-To create the visualization for an experiment, two pieces of information are required: (1) an `eda.csv` file providing the raw, uncleaned EDA signal for the full length of the experiment, and (2) the output of the [`SplitEDA`](https://colab.research.google.com/drive/1qa_WNjIPtVOfViCvvLyN10sI4Y4pNGes) Colab notebook, which organizes segments of the provided raw EDA signal into folders that you specify.
+To create the visualization for an experiment, two pieces of information are required: (1) an `eda.csv` file (concatenated file) providing the raw, uncleaned EDA signal for the full length of the experiment, and (2) the output of the [`SplitEDA`](https://colab.research.google.com/drive/1qa_WNjIPtVOfViCvvLyN10sI4Y4pNGes) Colab notebook, which organizes segments of the provided raw EDA signal into folders that you specify.
 
 The main program can be found in [`main.py`](./main.py). The only lines that need modification are lines 11 and 12, which accept the paths to the (1) `eda.csv` file and the (2) folder containing the output of `SplitEDA`, in that order. Use your preferred text editor to edit this file:
 
