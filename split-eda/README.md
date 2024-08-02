@@ -9,6 +9,8 @@ This package provides a script to visualize electrodermal activity data, using t
 # Usage
 
 First, clone this repository. Then install the required dependencies by running in the repository root:
+- main.py - for visualization
+- convert.py - for converting data schema (example input and output file is located under ./examples/convert/)
 
 ```bash
 git clone https://github.com/yeonchae62/REU_Project
